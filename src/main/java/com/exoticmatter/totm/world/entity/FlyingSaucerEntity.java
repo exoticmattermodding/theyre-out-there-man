@@ -64,8 +64,6 @@ public class FlyingSaucerEntity extends Mob implements PlayerRideableJumping {
     private Vec3  boostDir     = Vec3.ZERO;
     private double targetFwdSpeed  = 0.0;
 
-    private int   heldMaxPower = 0;
-    private float lastJumpPowerClient = 0f;
     private int   revWobbleLeft = 0;
 
     private final float wobblePhase;
@@ -125,47 +123,51 @@ public class FlyingSaucerEntity extends Mob implements PlayerRideableJumping {
     }
 
 
+
+    @Override
+    public int getJumpCooldown() {
+        return jumpCooldown;
+    }
+
     @Override
     public void handleStartJump(int power) {
-        if (level().isClientSide) {
-            lastJumpPowerClient = power / 100f;
-            if (power > heldMaxPower) heldMaxPower = power;
-            revWobbleLeft = Math.min(revWobbleLeft + 1, REV_WOBBLE_TICKS);
-            var mc = Minecraft.getInstance();
-            if (mc.player != null && mc.player.getVehicle() == this) {
-                mc.level.playLocalSound(this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.CROSSBOW_QUICK_CHARGE_1, SoundSource.PLAYERS, 0.2f, 1.25f, false);
+            if (level().isClientSide) return;
+
+            // Server is authoritative for the dash. Work out the aim direction using the rider when possible.
+            LivingEntity rider = this.getControllingPassenger();
+            Vec3 dir = null;
+            if (rider != null) {
+                Vec3 look = rider.getViewVector(1.0F);
+                dir = new Vec3(look.x, 0.0, look.z);
             }
+            if (dir == null || dir.lengthSqr() < 1.0e-6) {
+                Vec3 fallback = Vec3.directionFromRotation(0.0F, this.getYRot());
+                dir = new Vec3(fallback.x, 0.0, fallback.z);
+            }
+
+            applySlingshotServer(power, dir);
         }
-    }
+
 
     @Override
     public void handleStopJump() {
         // No client packet here; server will call onPlayerJump(power).
+        // Client release feedback happens in onPlayerJump; server has already processed the dash.
     }
 
 
     @Override
     public void onPlayerJump(int power) {
-        if (level().isClientSide) return; // only the server applies motion
-
-        // Choose a dash direction on the server.
-        // Prefer the rider's current facing (flattened), fall back to the saucer's facing.
-        Vec3 dir = null;
-        LivingEntity rider = this.getControllingPassenger();
-        if (rider != null) {
-            Vec3 look = rider.getViewVector(1.0F);
-            dir = new Vec3(look.x, 0.0, look.z); // keep level (no nose-dives)
+        if (!level().isClientSide) return;
+        revWobbleLeft = REV_WOBBLE_TICKS;
+        var mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.getVehicle() == this) {
+            float pitch = Mth.lerp(Mth.clamp(power / 100f, 0f, 1f), 1.15f, 1.45f);
+            mc.level.playLocalSound(this.getX(), this.getY(), this.getZ(),
+                    SoundEvents.CROSSBOW_SHOOT, SoundSource.PLAYERS, 0.35f, pitch, false);
         }
-        if (dir == null || dir.lengthSqr() < 1.0e-6) {
-            // Fallback: saucer forward from its yaw
-            Vec3 fwd = Vec3.directionFromRotation(0.0F, this.getYRot());
-            dir = new Vec3(fwd.x, 0.0, fwd.z);
-        }
-
-        // Re-use your existing server boost logic
-        applySlingshotServer(power, dir);
     }
+
 
 
 

@@ -11,6 +11,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.event.TickEvent;
+
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -36,14 +37,9 @@ public class SaucerCameraHandler {
     private static final double  FOV_SCALE             = 1.0;
 
     // --- State ---
-    private static boolean active = false;
+    private static boolean wasRiding = false;
     private static double  extraDistance = 8.0; // start a bit farther than vanilla
     private static double  curExtra      = extraDistance;
-
-    // Reflection cache (GameRenderer.thirdPersonDistance / thirdPersonDistancePrev)
-    private static Field thirdPersonDistanceField;
-    private static Field thirdPersonDistancePrevField;
-    private static boolean triedBindFields = false;
 
     private static boolean isRidingSaucer(Player p) {
         Entity v = p.getVehicle();
@@ -57,13 +53,10 @@ public class SaucerCameraHandler {
         Entity mount = event.getEntityBeingMounted();
 
         if (event.isMounting() && mount instanceof FlyingSaucerEntity) {
-            active = true;
             Minecraft mc = Minecraft.getInstance();
             if (mc.options.getCameraType() != CameraType.THIRD_PERSON_BACK) {
                 mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
             }
-        } else if (event.isDismounting() && mount instanceof FlyingSaucerEntity) {
-            active = false;
         }
     }
 
@@ -72,7 +65,7 @@ public class SaucerCameraHandler {
     public static void onScroll(InputEvent.MouseScrollingEvent event) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        if (!active || player == null || !isRidingSaucer(player)) return;
+        if (player == null || !isRidingSaucer(player)) return;
 
         double delta = event.getScrollDelta();
         if (delta == 0) return;
@@ -82,13 +75,27 @@ public class SaucerCameraHandler {
     }
 
     // Smoothly push the renderer’s distance every client tick (no missing hooks used)
+    // Maintain state and enforce third person every tick
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
 
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        if (!active || player == null || !isRidingSaucer(player)) return;
+        if (player == null) {
+            wasRiding = false;
+            return;
+        }
+
+        if (!isRidingSaucer(player)) {
+            wasRiding = false;
+            return;
+        }
+
+        if (!wasRiding) {
+            wasRiding = true;
+            curExtra = extraDistance;
+        }
 
         if (mc.options.getCameraType() != CameraType.THIRD_PERSON_BACK) {
             mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
@@ -96,7 +103,7 @@ public class SaucerCameraHandler {
 
         curExtra = Mth.lerp(LERP_SPEED, curExtra, extraDistance);
         double total = BASE_DISTANCE + curExtra;
-        setThirdPersonDistance(mc, total);
+        updateCameraDistance(mc, total);
     }
 
     // Optional: widen FOV when riding (this hook exists on 47.4.0)
@@ -105,58 +112,70 @@ public class SaucerCameraHandler {
         if (!SCALE_FOV_WHEN_RIDING) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        if (!active || player == null || !isRidingSaucer(player)) return;
+        if (player == null || !isRidingSaucer(player)) return;
 
         event.setFOV(event.getFOV() * FOV_SCALE);
     }
 
     // --- Reflection helpers ---
 
-    private static void bindDistanceFields(Minecraft mc) {
-        if (triedBindFields) return;
-        triedBindFields = true;
-        try {
-            // Mojmap names in 1.20.1:
-            // private float thirdPersonDistance;
-            // private float thirdPersonDistancePrev;
-            Class<?> gr = mc.gameRenderer.getClass();
-            thirdPersonDistanceField = gr.getDeclaredField("thirdPersonDistance");
-            thirdPersonDistancePrevField = gr.getDeclaredField("thirdPersonDistancePrev");
-            thirdPersonDistanceField.setAccessible(true);
-            thirdPersonDistancePrevField.setAccessible(true);
-        } catch (Throwable t) {
-            // Fallback: scan for likely names if mappings differ
+        private static Field thirdPersonDistanceField;
+        private static Field thirdPersonDistancePrevField;
+        private static boolean triedBindFields = false;
+
+        private static void ensureDistanceFields(Minecraft mc) {
+            if (triedBindFields) return;
+            triedBindFields = true;
             try {
+                // Mojmap names in 1.20.1:
+                // private float thirdPersonDistance;
+                // private float thirdPersonDistancePrev;
                 Class<?> gr = mc.gameRenderer.getClass();
-                thirdPersonDistanceField = findAnyField(gr, "third", "person", "distance");
-                thirdPersonDistancePrevField = findAnyField(gr, "third", "person", "distance", "prev");
-                if (thirdPersonDistanceField != null) thirdPersonDistanceField.setAccessible(true);
-                if (thirdPersonDistancePrevField != null) thirdPersonDistancePrevField.setAccessible(true);
-            } catch (Throwable ignored) {}
-        }
-    }
-
-    private static Field findAnyField(Class<?> cls, String... parts) {
-        outer:
-        for (Field f : cls.getDeclaredFields()) {
-            String name = f.getName().toLowerCase();
-            for (String p : parts) {
-                if (!name.contains(p)) continue outer;
+                thirdPersonDistanceField = gr.getDeclaredField("thirdPersonDistance");
+                thirdPersonDistancePrevField = gr.getDeclaredField("thirdPersonDistancePrev");
+                Class<?> rendererClass = mc.gameRenderer.getClass();
+                thirdPersonDistanceField = rendererClass.getDeclaredField("thirdPersonDistance");
+                thirdPersonDistancePrevField = rendererClass.getDeclaredField("thirdPersonDistancePrev");
+                thirdPersonDistanceField.setAccessible(true);
+                thirdPersonDistancePrevField.setAccessible(true);
+            } catch (ReflectiveOperationException ignored) {
+                // Best-effort fallback for remapped or obfuscated names
+                try {
+                    Class<?> rendererClass = mc.gameRenderer.getClass();
+                    thirdPersonDistanceField = findField(rendererClass, "third", "person", "distance");
+                    thirdPersonDistancePrevField = findField(rendererClass, "third", "person", "distance", "prev");
+                    if (thirdPersonDistanceField != null) thirdPersonDistanceField.setAccessible(true);
+                    if (thirdPersonDistancePrevField != null) thirdPersonDistancePrevField.setAccessible(true);
+                } catch (Exception ignoredAgain) {
+                // If we cannot bind the fields we will simply skip updates.
             }
-            return f;
+
         }
-        return null;
     }
 
-    private static void setThirdPersonDistance(Minecraft mc, double distance) {
-        bindDistanceFields(mc);
-        if (thirdPersonDistanceField == null || thirdPersonDistancePrevField == null) return;
-        try {
-            float f = (float) distance;
-            thirdPersonDistanceField.setFloat(mc.gameRenderer, f);
-            thirdPersonDistancePrevField.setFloat(mc.gameRenderer, f);
-        } catch (Throwable ignored) {
-            // If reflection ever fails, we just skip this tick gracefully.
-        }
-    }
-}
+                private static Field findField(Class<?> type, String... parts) {
+                    search:
+                    for (Field field : type.getDeclaredFields()) {
+                        String name = field.getName().toLowerCase();
+                        for (String part : parts) {
+                            if (!name.contains(part)) {
+                                continue search;
+                            }
+                        }
+                        return field;
+                    }
+                    return null;
+                }
+
+                    private static void updateCameraDistance(Minecraft mc, double distance) {
+                        ensureDistanceFields(mc);
+                        if (thirdPersonDistanceField == null || thirdPersonDistancePrevField == null) return;
+                        try {
+                            float dist = (float) distance;
+                            thirdPersonDistanceField.setFloat(mc.gameRenderer, dist);
+                            thirdPersonDistancePrevField.setFloat(mc.gameRenderer, dist);
+                        } catch (IllegalAccessException ignored) {
+                            // Leave vanilla distance untouched if reflection fails.
+                        }
+                    }
+                }
