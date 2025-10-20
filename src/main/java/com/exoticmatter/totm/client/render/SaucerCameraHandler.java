@@ -4,6 +4,7 @@ import com.exoticmatter.totm.world.entity.FlyingSaucerEntity;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -11,42 +12,52 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.event.TickEvent;
-
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.util.ObfuscationReflectionHelper;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Forge 1.20.1 (47.4.0) camera zoom for the saucer without ComputeCameraPosition:
- * - Mouse wheel changes real third-person distance
- * - Smooth interpolation each client tick
- * - Locks view to THIRD_PERSON_BACK while riding
+ * Saucer third-person scroll zoom for Forge 47.4.0.
+ * - Preferred: distance-based zoom by adjusting Camera third-person distance via reflection
+ * - Fallback available (commented earlier) was FOV-based; kept disabled due to distortion
+ * - Smooth interpolation and safety clamps; forces third-person-back while mounted
  */
 @Mod.EventBusSubscriber(modid = "totm", value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class SaucerCameraHandler {
 
     // --- Tunables ---
-    private static final double BASE_DISTANCE = 6.0;   // vanilla-ish
-    private static final double MAX_EXTRA     = 26.0;  // total ~32 blocks (6 + 26)
-    private static final double MIN_EXTRA     = 0.0;
-    private static final double SCROLL_STEP   = 1.0;   // wheel notch step
-    private static final double LERP_SPEED    = 0.25;  // 0..1 smoothing
-    private static final boolean SCALE_FOV_WHEN_RIDING = false;
-    private static final double  FOV_SCALE             = 1.0;
+    private static final double BASE_DISTANCE          = 6.0;   // vanilla-ish base
+    private static final double MAX_EXTRA              = 26.0;  // additional distance beyond base
+    private static final double MIN_TOTAL              = 3.0;   // hard lower bound to avoid inversion
+    private static final double SCROLL_STEP            = 0.6;   // distance change per notch
+    private static final double LERP_SPEED             = 0.18;  // smoother interpolation
+    private static final int    SCROLL_DIR             = -1;    // scroll up zooms OUT
+    private static final boolean DEBUG_LOGS            = true; // enable briefly only
+    private static final boolean PRINT_CAMERA_SNAPSHOT = true; // set true once to log Camera fields
 
     // --- State ---
     private static boolean wasRiding = false;
-    private static double  extraDistance = 8.0; // start a bit farther than vanilla
-    private static double  curExtra      = extraDistance;
+    private static double  extraDistance   = 8.0; // start farther than vanilla
+    private static double  curExtra        = extraDistance;
+    private static double  lastAppliedTotal = -1.0;
+
+    // Reflection bindings to Camera fields (development-friendly, deobf-aware)
+    private static Field camDistField;
+    private static Field camDistPrevField;
+    private static boolean triedBindCamera = false;
 
     private static boolean isRidingSaucer(Player p) {
         Entity v = p.getVehicle();
         return v instanceof FlyingSaucerEntity;
     }
 
-    // Mount/dismount toggles the behavior (correct accessors on 47.4.0)
+    // Mount/dismount toggles the behavior
     @SubscribeEvent
     public static void onMount(EntityMountEvent event) {
         if (!(event.getEntityMounting() instanceof Player)) return;
@@ -57,10 +68,13 @@ public class SaucerCameraHandler {
             if (mc.options.getCameraType() != CameraType.THIRD_PERSON_BACK) {
                 mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
             }
+            // Reset cache when mounting
+            lastAppliedTotal = -1.0;
+            if (PRINT_CAMERA_SNAPSHOT) dumpCameraNumericFields(mc);
         }
     }
 
-    // Mouse wheel sets the target distance (consume so hotbar doesn’t scroll)
+    // Mouse wheel sets the target distance (consume to prevent hotbar scroll)
     @SubscribeEvent
     public static void onScroll(InputEvent.MouseScrollingEvent event) {
         Minecraft mc = Minecraft.getInstance();
@@ -70,12 +84,16 @@ public class SaucerCameraHandler {
         double delta = event.getScrollDelta();
         if (delta == 0) return;
 
-        extraDistance = Mth.clamp(extraDistance - (delta * SCROLL_STEP), MIN_EXTRA, MAX_EXTRA);
+        double before = extraDistance;
+        double target = extraDistance + (delta * SCROLL_DIR * SCROLL_STEP);
+        extraDistance = Mth.clamp(target, 0.0, MAX_EXTRA);
         event.setCanceled(true);
+        if (DEBUG_LOGS) {
+            System.out.println("[TOTM] Scroll delta=" + delta + " extraDistance: " + before + " -> " + extraDistance);
+        }
     }
 
-    // Smoothly push the renderer’s distance every client tick (no missing hooks used)
-    // Maintain state and enforce third person every tick
+    // Smoothly push the renderer's distance every client tick
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -92,90 +110,125 @@ public class SaucerCameraHandler {
             return;
         }
 
-        if (!wasRiding) {
-            wasRiding = true;
-            curExtra = extraDistance;
-        }
+        if (!wasRiding) wasRiding = true;
 
         if (mc.options.getCameraType() != CameraType.THIRD_PERSON_BACK) {
             mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
         }
 
         curExtra = Mth.lerp(LERP_SPEED, curExtra, extraDistance);
-        double total = BASE_DISTANCE + curExtra;
-        updateCameraDistance(mc, total);
+        double total = Math.max(MIN_TOTAL, BASE_DISTANCE + curExtra);
+        if (Math.abs(total - lastAppliedTotal) > 0.05) {
+            applyCameraDistance(mc, total);
+            lastAppliedTotal = total;
+        }
     }
 
-    // Optional: widen FOV when riding (this hook exists on 47.4.0)
+    // Optional: widen FOV when riding (hook exists on 47.4.0)
     @SubscribeEvent
     public static void onComputeFov(ViewportEvent.ComputeFov event) {
-        if (!SCALE_FOV_WHEN_RIDING) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || !isRidingSaucer(player)) return;
 
-        event.setFOV(event.getFOV() * FOV_SCALE);
-    }
-
-    // --- Reflection helpers ---
-
-        private static Field thirdPersonDistanceField;
-        private static Field thirdPersonDistancePrevField;
-        private static boolean triedBindFields = false;
-
-        private static void ensureDistanceFields(Minecraft mc) {
-            if (triedBindFields) return;
-            triedBindFields = true;
-            try {
-                // Mojmap names in 1.20.1:
-                // private float thirdPersonDistance;
-                // private float thirdPersonDistancePrev;
-                Class<?> gr = mc.gameRenderer.getClass();
-                thirdPersonDistanceField = gr.getDeclaredField("thirdPersonDistance");
-                thirdPersonDistancePrevField = gr.getDeclaredField("thirdPersonDistancePrev");
-                Class<?> rendererClass = mc.gameRenderer.getClass();
-                thirdPersonDistanceField = rendererClass.getDeclaredField("thirdPersonDistance");
-                thirdPersonDistancePrevField = rendererClass.getDeclaredField("thirdPersonDistancePrev");
-                thirdPersonDistanceField.setAccessible(true);
-                thirdPersonDistancePrevField.setAccessible(true);
-            } catch (ReflectiveOperationException ignored) {
-                // Best-effort fallback for remapped or obfuscated names
-                try {
-                    Class<?> rendererClass = mc.gameRenderer.getClass();
-                    thirdPersonDistanceField = findField(rendererClass, "third", "person", "distance");
-                    thirdPersonDistancePrevField = findField(rendererClass, "third", "person", "distance", "prev");
-                    if (thirdPersonDistanceField != null) thirdPersonDistanceField.setAccessible(true);
-                    if (thirdPersonDistancePrevField != null) thirdPersonDistancePrevField.setAccessible(true);
-                } catch (Exception ignoredAgain) {
-                // If we cannot bind the fields we will simply skip updates.
-            }
-
+        // Ensure distance is applied near render as well
+        double total = Math.max(MIN_TOTAL, BASE_DISTANCE + curExtra);
+        if (Math.abs(total - lastAppliedTotal) > 0.05) {
+            applyCameraDistance(mc, total);
+            lastAppliedTotal = total;
         }
     }
 
-                private static Field findField(Class<?> type, String... parts) {
-                    search:
-                    for (Field field : type.getDeclaredFields()) {
-                        String name = field.getName().toLowerCase();
-                        for (String part : parts) {
-                            if (!name.contains(part)) {
-                                continue search;
-                            }
-                        }
-                        return field;
-                    }
-                    return null;
-                }
+    // Also apply around angle computation, which runs during camera setup each frame
+    @SubscribeEvent
+    public static void onComputeAngles(ViewportEvent.ComputeCameraAngles event) {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null || !isRidingSaucer(player)) return;
+        double total = Math.max(MIN_TOTAL, BASE_DISTANCE + curExtra);
+        if (Math.abs(total - lastAppliedTotal) > 0.05) {
+            applyCameraDistance(mc, total);
+            lastAppliedTotal = total;
+        }
+    }
 
-                    private static void updateCameraDistance(Minecraft mc, double distance) {
-                        ensureDistanceFields(mc);
-                        if (thirdPersonDistanceField == null || thirdPersonDistancePrevField == null) return;
-                        try {
-                            float dist = (float) distance;
-                            thirdPersonDistanceField.setFloat(mc.gameRenderer, dist);
-                            thirdPersonDistancePrevField.setFloat(mc.gameRenderer, dist);
-                        } catch (IllegalAccessException ignored) {
-                            // Leave vanilla distance untouched if reflection fails.
-                        }
-                    }
+    // --- Binding & application for Camera distance ---
+
+    private static void bindCameraFields(Minecraft mc) {
+        if (triedBindCamera || (camDistField != null && camDistPrevField != null)) return;
+        triedBindCamera = true;
+        try {
+            Class<?> camClass = mc.gameRenderer.getMainCamera().getClass();
+            // Try common deobf names first
+            camDistField = tryField(camClass, "thirdPersonDistance", "thirdPersonBackDistance", "cameraDistance");
+            camDistPrevField = tryField(camClass, "thirdPersonDistancePrev", "thirdPersonBackDistancePrev", "cameraDistancePrev");
+
+            if (camDistField == null || camDistPrevField == null) {
+                // Fallback: pick two non-static float/double fields with plausible values (3..10)
+                Object cam = mc.gameRenderer.getMainCamera();
+                List<Field> nums = new ArrayList<>();
+                List<Field> pref = new ArrayList<>();
+                for (Field f : camClass.getDeclaredFields()) {
+                    if (Modifier.isStatic(f.getModifiers())) continue;
+                    Class<?> t = f.getType();
+                    if (t != float.class && t != double.class) continue;
+                    try {
+                        f.setAccessible(true);
+                        double v = (t == float.class) ? f.getFloat(cam) : f.getDouble(cam);
+                        nums.add(f);
+                        if (v >= 3.0 && v <= 10.0) pref.add(f);
+                    } catch (Throwable ignored) {}
                 }
+                List<Field> pick = !pref.isEmpty() ? pref : nums;
+                if (!pick.isEmpty()) camDistField = pick.get(0);
+                if (pick.size() >= 2) camDistPrevField = pick.get(1);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static Field tryField(Class<?> cls, String... names) {
+        for (String n : names) {
+            try { Field f = cls.getDeclaredField(n); f.setAccessible(true); return f; } catch (NoSuchFieldException ignored) {}
+            try { Field f = ObfuscationReflectionHelper.findField(cls, n); f.setAccessible(true); return f; } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static void applyCameraDistance(Minecraft mc, double distance) {
+        bindCameraFields(mc);
+        if (camDistField == null || camDistPrevField == null) return;
+        Object cam = mc.gameRenderer.getMainCamera();
+        try {
+            setNumeric(cam, camDistField, distance);
+            setNumeric(cam, camDistPrevField, distance);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void setNumeric(Object target, Field field, double value) throws IllegalAccessException {
+        if (field.getType() == float.class) field.setFloat(target, (float) value);
+        else if (field.getType() == double.class) field.setDouble(target, value);
+    }
+
+    private static void dumpCameraNumericFields(Minecraft mc) {
+        try {
+            Object cam = mc.gameRenderer.getMainCamera();
+            Class<?> cc = cam.getClass();
+            System.out.println("[TOTM] Camera numeric field snapshot:");
+            for (Field f : cc.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                Class<?> t = f.getType();
+                if (t != float.class && t != double.class) continue;
+                try {
+                    f.setAccessible(true);
+                    double v = (t == float.class) ? f.getFloat(cam) : f.getDouble(cam);
+                    System.out.println("  - " + f.getName() + " = " + v + " (" + t.getSimpleName() + ")");
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    // Accessed by mixin to know how far to push back beyond vanilla distance
+    public static double getExtraPush() {
+        return Math.max(0.0, curExtra);
+    }
+}

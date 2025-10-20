@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.exoticmatter.totm.mixin",
+  "refmap": "totm.refmap.json",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "MixinCamera"
+  ],
+  "mixins": [
+    "MixinDecoratedPotPatterns",
+    "MixinSheets"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "rotation=0":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=1":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=2":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=3":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=4":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=5":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=6":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=7":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=8":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=9":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=10": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=11": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=12": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=13": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=14": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
+    "rotation=15": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ]
+  }
+}

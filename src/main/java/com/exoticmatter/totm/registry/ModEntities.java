@@ -1,6 +1,8 @@
 package com.exoticmatter.totm.registry;
 
 import com.exoticmatter.totm.world.entity.FlyingSaucerEntity;
+import com.exoticmatter.totm.world.entity.CrashedSaucerEntity;
+import com.exoticmatter.totm.world.entity.GrayAlienEntity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -19,4 +21,21 @@ public class ModEntities {
                             .sized(5.0F, 1.0F)
                             .build(new ResourceLocation("totm", "flying_saucer").toString())
             );
+
+    public static final RegistryObject<EntityType<GrayAlienEntity>> GRAY_ALIEN =
+            ENTITIES.register("gray_alien",
+                    () -> EntityType.Builder.<GrayAlienEntity>of(GrayAlienEntity::new,
+                                    MobCategory.MONSTER)
+                            .sized(0.6F, 1.95F)
+                            .build(new ResourceLocation("totm", "gray_alien").toString())
+            );
+
+    public static final RegistryObject<EntityType<CrashedSaucerEntity>> CRASHED_SAUCER =
+            ENTITIES.register("crashed_saucer",
+                    () -> EntityType.Builder.<CrashedSaucerEntity>of(CrashedSaucerEntity::new,
+                                    MobCategory.MISC)
+                            .sized(5.0F, 1.0F)
+                            .build(new ResourceLocation("totm", "crashed_saucer").toString())
+            );
+
 }

@@ -21,29 +21,19 @@ public class FlyingSaucerModel<T extends Entity> extends EntityModel<T> {
 		this.flying_saucer = root.getChild("flying_saucer");
 	}
 
-	public static LayerDefinition createBodyLayer() {
-		MeshDefinition meshdefinition = new MeshDefinition();
-		PartDefinition root = meshdefinition.getRoot();
+    public static LayerDefinition createBodyLayer() {
+        MeshDefinition meshdefinition = new MeshDefinition();
+        PartDefinition partdefinition = meshdefinition.getRoot();
 
-		// NOTE:
-		// - Removed CubeDeformation(1.0F) -> 0.0F to keep UVs exact.
-		// - Swapped Y of the two 40x2x40 plates so "top" / "bottom" align with Blockbench.
+        partdefinition.addOrReplaceChild("flying_saucer",
+                CubeListBuilder.create()
+                        .texOffs(0, 0).addBox(-40.0F, -2.0F, -40.0F, 80.0F, 1.0F, 80.0F, new CubeDeformation(1.0F))
+                        .texOffs(0, 81).addBox(-20.0F, -18.01F, -20.0F, 40.0F, 15.0F, 40.0F, new CubeDeformation(0.0F)),
+                PartPose.offset(0.0F, 24.0F, 0.0F));
 
-		PartDefinition flying_saucer = root.addOrReplaceChild(
-				"flying_saucer",
-				CubeListBuilder.create()
-						// large disk (was 80x1x80 with +1 inflation); keep geometry but no inflation
-						.texOffs(0, 0).addBox(-40.0F, 0.0F, -40.0F, 80.0F, 1.0F, 80.0F, new CubeDeformation(0.0F))
-						// TOP plate (swap to y = -5 -> y = 0 if it looked inverted)
-						.texOffs(120, 83).addBox(-20.0F, 1.0F, -20.0F, 40.0F, 2.0F, 40.0F, new CubeDeformation(0.0F))
-						// BOTTOM plate (swap to y = -5)
-						.texOffs(0, 81).addBox(-20.0F, -2.0F, -20.0F, 40.0F, 2.0F, 40.0F, new CubeDeformation(0.0F)),
-				PartPose.offset(0.0F, 24.0F, 0.0F)
-		);
-
-		// Make sure your PNG is exactly 320x125 (or change these numbers to match the PNG)
-		return LayerDefinition.create(meshdefinition, 320, 125);
-	}
+        // Texture size from Blockbench export (updated)
+        return LayerDefinition.create(meshdefinition, 332, 180);
+    }
 
 	@Override
 	public void setupAnim(T entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {

@@ -41,14 +41,14 @@ graphicsMode:1
 ao:true
 prioritizeChunkUpdates:0
 biomeBlendRadius:2
-renderClouds:"true"
+renderClouds:"false"
 resourcePacks:[]
 incompatibleResourcePacks:[]
 lastServer:
 lang:en_us
 soundDevice:""
 chatVisibility:0
-chatOpacity:1.0
+chatOpacity:0.2323943661971831
 chatLineSpacing:0.0
 textBackgroundOpacity:0.5
 backgroundForChatOnly:true
@@ -118,6 +118,8 @@ key_key.hotbar.6:key.keyboard.6
 key_key.hotbar.7:key.keyboard.7
 key_key.hotbar.8:key.keyboard.8
 key_key.hotbar.9:key.keyboard.9
+key_key.totm.toggle_glow:key.keyboard.r
+key_key.totm.toggle_beam:key.keyboard.f
 soundCategory_master:1.0
 soundCategory_music:0.0
 soundCategory_record:1.0

@@ -5,9 +5,15 @@ pluginManagement {
             name = 'MinecraftForge'
             url = 'https://maven.minecraftforge.net/'
         }
+        maven {
+            name = 'Sponge'
+            url = 'https://repo.spongepowered.org/maven' // Ensure Sponge repo is included here
+        }
+        mavenCentral() // Ensure other plugins can be resolved
+    }
+    plugins {
+        id 'org.spongepowered.mixin' version '0.8.5' // Ensure version is correct
     }
 }
 
-plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
-}
+rootProject.name = 'totm' // Replace with your actual mod name

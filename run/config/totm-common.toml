@@ -1,0 +1,33 @@
+
+[encounters]
+	#Minimum stage 0 view time (seconds)
+	#Range: 0 ~ 600
+	minViewSeconds = 15
+	#Deploy stage length (seconds)
+	#Range: 1 ~ 600
+	deployDurationSeconds = 15
+	#Return wait stage length (seconds)
+	#Range: 1 ~ 600
+	returnWaitSeconds = 20
+	#Base daily encounter chance (0..1)
+	#Range: 0.0 ~ 1.0
+	baseChance = 0.5
+	#Thunder daily encounter chance (0..1)
+	#Range: 0.0 ~ 1.0
+	thunderChance = 0.9
+	#Opportunistic dusk encounter chance per tick (0..1)
+	#Range: 0.0 ~ 1.0
+	duskChance = 0.02
+
+[darkMatter]
+	#Range: 1 ~ 100000
+	max = 1000
+	#Range: 0 ~ 1000
+	regenPerTick = 4
+	#Range: 0 ~ 1000
+	beamDrainPerTick = 6
+	#Range: 0 ~ 100000
+	dashCostBase = 100
+	#Range: 0 ~ 100000
+	dashCostPerPower = 4
+

@@ -3,6 +3,7 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.+'
 }
 
 version = mod_version
@@ -47,13 +48,9 @@ minecraft {
     // By default, the folder name of a run configuration is the name of the Gradle project containing it.
     // generateRunFolders = true
 
-    // This property enables access transformers for use in development.
-    // They will be applied to the Minecraft artifact.
-    // The access transformer file can be anywhere in the project.
-    // However, it must be at "META-INF/accesstransformer.cfg" in the final mod jar to be loaded by Forge.
-    // This default location is a best practice to automatically put the file in the right place in the final jar.
-    // See https://docs.minecraftforge.net/en/latest/advanced/accesstransformers/ for more information.
-    // accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+    // Enable access transformers to open required client fields (camera distance) in dev and runtime.
+    // See https://docs.minecraftforge.net/en/latest/advanced/accesstransformers/
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
 
     // Default run configurations.
     // These can be tweaked, removed, or duplicated as needed.
@@ -112,15 +109,15 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
-    // Put repositories for dependencies here
-    // ForgeGradle automatically adds the Forge maven and Maven Central for you
+    maven { url 'https://repo.spongepowered.org/maven' }
+    maven { url 'https://maven.minecraftforge.net/' }
+    mavenCentral() // Ensure Maven Central is also included
 
-    // If you have mod jar dependencies in ./libs, you can declare them as a repository like so.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html#sub:flat_dir_resolver
-    // flatDir {
-    //     dir 'libs'
-    // }
+    // Add the Sponge repository for the Mixin plugin
+    maven { url 'https://maven.spongepowered.org/repository/maven-public/' }
 }
+
+
 
 dependencies {
     // Specify the version of Minecraft to use.
@@ -129,7 +126,7 @@ dependencies {
     // If the group id is "net.minecraft" and the artifact id is one of ["client", "server", "joined"],
     // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-common-api:${jei_version}")
@@ -167,21 +164,33 @@ tasks.named('processResources', ProcessResources).configure {
 
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
+    // This step ensures that the refmap is included in the final JAR
+    from("$buildDir/tmp") { // Adjust this if the refmap is in another folder
+        include '**/totm.refmap.json'
+    }
+
     manifest {
         attributes([
                 'Specification-Title'     : mod_id,
                 'Specification-Vendor'    : mod_authors,
-                'Specification-Version'   : '1', // We are version 1 of ourselves
+                'Specification-Version'   : '1',
                 'Implementation-Title'    : project.name,
                 'Implementation-Version'  : project.jar.archiveVersion,
                 'Implementation-Vendor'   : mod_authors,
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'totm.mixins.json',
+                'Refmap'                  : 'totm.refmap.json'  // Ensure this is in the manifest too
         ])
     }
 
-    // This is the preferred method to reobfuscate your jar file
-    finalizedBy 'reobfJar'
+    finalizedBy 'reobfJar' // Ensure this is still working to obfuscate the jar
 }
+
+
+
+
+
+
 
 // However if you are in a multi-project build, dev time needs unobfed jar files, so you can delay the obfuscation until publishing by doing:
 // tasks.named('publish').configure {
@@ -205,3 +214,46 @@ publishing {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
+
+task printRefmapLocation {
+    doLast {
+        println "Refmap location: $buildDir/tmp"
+    }
+}
+
+jar {
+    from "$buildDir/tmp/totm.refmap.json" // Include the refmap in the JAR
+    // You can also put it into a specific directory inside the JAR if you want:
+    // into 'assets/com/exoticmatter/totm' // (if needed)
+}
+
+task copyRefmapToResources {
+    doLast {
+        def refmapLocation = file("$buildDir/tmp/totm.refmap.json")
+        def resourcesDir = file("src/main/resources")
+
+        if (refmapLocation.exists()) {
+            // Ensure resources directory exists
+            if (!resourcesDir.exists()) {
+                resourcesDir.mkdirs()
+            }
+
+            // Copy refmap to resources folder
+            copy {
+                from refmapLocation
+                into resourcesDir
+                rename { "totm.refmap.json" }
+            }
+            println "Refmap copied to resources folder."
+        } else {
+            println "Refmap file not found at $refmapLocation"
+        }
+    }
+}
+
+// Make sure the task runs before the build task to copy the refmap
+tasks.named('build').configure {
+    dependsOn copyRefmapToResources
+}
+
+

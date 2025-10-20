@@ -2,8 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/TOTM.main.iml" filepath="$PROJECT_DIR$/.idea/modules/TOTM.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/TOTM.test.iml" filepath="$PROJECT_DIR$/.idea/modules/TOTM.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/totm.main.iml" filepath="$PROJECT_DIR$/.idea/modules/totm.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/totm.test.iml" filepath="$PROJECT_DIR$/.idea/modules/totm.test.iml" />
     </modules>
   </component>
 </project>

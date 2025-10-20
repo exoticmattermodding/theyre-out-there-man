@@ -1,0 +1,4 @@
+com/exoticmatter/totm/mixin/MixinCamera getXRot ()F m_90589_
+com/exoticmatter/totm/mixin/MixinCamera getYRot ()F m_90590_
+com/exoticmatter/totm/mixin/MixinCamera move (DDD)V m_90568_
+com/exoticmatter/totm/mixin/MixinCamera getPosition ()Lnet/minecraft/world/phys/Vec3; m_90583_

@@ -1,9 +1,11 @@
 Manifest-Version: 1.0
-Specification-Title: tomt
+Specification-Title: totm
 Specification-Vendor: Exotic Matter
 Specification-Version: 1
-Implementation-Title: TOTM
+Implementation-Title: totm
 Implementation-Version: 0.0.0
 Implementation-Vendor: Exotic Matter
-Implementation-Timestamp: 2025-10-14T16:55:00-0400
+Implementation-Timestamp: 2025-10-19T21:01:52-0400
+MixinConfigs: totm.mixins.json
+Refmap: totm.refmap.json
 

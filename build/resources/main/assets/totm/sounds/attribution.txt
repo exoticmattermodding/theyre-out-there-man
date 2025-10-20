@@ -1,0 +1,17 @@
+dash.ogg
+Sound Effect by Rescopic Sound from Pixabay
+
+mount_theremin.ogg
+Sound Effect by freesound_community from Pixabay
+
+beam_start.ogg
+Sound Effect by freesound_community from Pixabay
+
+beam_loop.ogg
+Sound Effect by freesound_community from Pixabay
+
+crash.ogg
+Sound Effect by David Dumais from Pixabay
+
+engine_loop.ogg
+Sound Effect by freesound_community from Pixabay

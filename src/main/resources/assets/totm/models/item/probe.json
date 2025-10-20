@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "totm:item/alien_probe"
+  },
+  "overrides": [
+    { "predicate": { "totm:bound": 0.5 }, "model": "totm:item/probe_bound" }
+  ]
+}
