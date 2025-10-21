@@ -1,8 +1,0 @@
-{
-  "variants": {
-    "facing=north": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
-    "facing=south": [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
-    "facing=west":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ],
-    "facing=east":  [ { "model": "totm:block/alien_head" }, { "model": "minecraft:builtin/entity" } ]
-  }
-}
