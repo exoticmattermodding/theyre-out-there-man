@@ -1,0 +1,5 @@
+{
+  "sources": [
+    { "type": "directory", "source": "decorated_pot", "prefix": "decorated_pot/" }
+  ]
+}
